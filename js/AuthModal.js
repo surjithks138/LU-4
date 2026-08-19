@@ -55,13 +55,24 @@ function AuthModal({onSignedIn, onClose, page=false}){
         if(err) throw err;
         onSignedIn(data.user);
       }else{
-        const {data, error: err} = await supabaseClient.auth.signUp({email:email.trim(), password});
+        const {data, error: err} = await supabaseClient.auth.signUp({
+          email:email.trim(),
+          password,
+          options:{emailRedirectTo:window.location.origin}
+        });
         if(err) throw err;
         if(data.session){ onSignedIn(data.user); }
         else { setInfo('Account created — check your email to confirm before signing in.'); }
       }
     }catch(err){
-      setError(err.message || 'Something went wrong.');
+      const message = (err.message || '').toLowerCase();
+      if(message.includes('rate limit') || err.status===429){
+        setError('Supabase email limit reached. Wait before requesting another email, or disable email confirmation in Supabase for local testing.');
+      }else if(message.includes('otp') && message.includes('expired')){
+        setError('This confirmation link expired. Request one new email and use only the latest link.');
+      }else{
+        setError(err.message || 'Something went wrong.');
+      }
     }finally{
       setBusy(false);
     }
