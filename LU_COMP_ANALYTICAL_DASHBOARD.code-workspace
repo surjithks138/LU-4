@@ -1,0 +1,13 @@
+{
+        "folders": [
+                {
+                        "path": "../../OneDrive/Documents/LU_COMP_ANALYTICAL_DASHBOARD"
+                },
+                {
+                        "path": "."
+                }
+        ],
+        "settings": {
+                "liveServer.settings.multiRootWorkspaceName": "LU_COMP_ANALYTICAL_DASHBOARD"
+        }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "lu-completion-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LU completion tracking dashboard",
+  "scripts": {
+    "dev": "live-server --port=8000 --open=/"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}
