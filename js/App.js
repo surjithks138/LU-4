@@ -13,6 +13,10 @@ function App(){
   const [showLogin,setShowLogin] = useState(true);
   const [mailMenu,setMailMenu] = useState(null);
   const [compose,setCompose] = useState(null);
+  const [gmailToken,setGmailToken] = useState(null);
+  const [gmailEmail,setGmailEmail] = useState('');
+  const [gmailBusy,setGmailBusy] = useState(false);
+  const [gmailMessage,setGmailMessage] = useState('');
   const fileRef = useRef();
 
   const activeSheet = sheets.find(s=>s.id===activeId) || null;
@@ -66,6 +70,28 @@ function App(){
     if(supabaseReady) await supabaseClient.auth.signOut();
     setAuthUser(null);
     setShowLogin(true);
+  }
+
+  function connectGmail(){
+    if(!window.google?.accounts?.oauth2){
+      setGmailMessage('Google sign-in library is still loading. Refresh and try again.');
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id:GOOGLE_CLIENT_ID,
+      scope:GOOGLE_GMAIL_SCOPE,
+      callback:async response=>{
+        if(response.error){ setGmailMessage(response.error); return; }
+        setGmailToken(response.access_token);
+        try{
+          const result = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {headers:{Authorization:`Bearer ${response.access_token}`}});
+          const profile = await result.json();
+          setGmailEmail(profile.emailAddress || 'Gmail connected');
+          setGmailMessage('Gmail connected');
+        }catch(e){ setGmailEmail('Gmail connected'); }
+      },
+    });
+    tokenClient.requestAccessToken({prompt:gmailToken ? '' : 'consent'});
   }
 
   function parseSheetFromWorkbook(json){
@@ -200,8 +226,36 @@ function App(){
     launchMail(draft);
   }
 
-  function launchMail(draft){
+  async function sendThroughGmail(draft){
+    const lines = [
+      `Bcc: ${draft.recipients.join(', ')}`,
+      `Subject: ${draft.subject}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      draft.body,
+    ];
+    const encoded = btoa(unescape(encodeURIComponent(lines.join('\r\n'))))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const result = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method:'POST',
+      headers:{Authorization:`Bearer ${gmailToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({raw:encoded}),
+    });
+    if(!result.ok) throw new Error('Gmail could not send this message. Reconnect Gmail and try again.');
+  }
+
+  async function launchMail(draft){
     if(draft.recipients.length===0) return;
+    if(gmailToken){
+      setGmailBusy(true); setGmailMessage('Sending email...');
+      try{
+        await sendThroughGmail(draft);
+        setGmailMessage(`Sent from ${gmailEmail || 'Gmail'}`);
+      }catch(error){
+        setGmailMessage(error.message);
+      }finally{ setGmailBusy(false); }
+      return;
+    }
     const mailto = `mailto:?bcc=${encodeURIComponent(draft.recipients.join(','))}&subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
     if(mailto.length>1800){
       copyEmails();
@@ -320,6 +374,12 @@ function App(){
         </div>
       )}
       <div className="signin-corner">
+        {gmailToken ? (
+          <span className="gmail-status">{gmailEmail || 'Gmail connected'}</span>
+        ) : (
+          <button className="signin-btn" onClick={connectGmail}>Connect Gmail</button>
+        )}
+        {gmailMessage && <span className="gmail-message">{gmailMessage}</span>}
         {authUser ? (
           <>
             <span className="account-id">{authUser.email}</span>
