@@ -10,7 +10,13 @@ function App(){
   const [view,setView] = useState('assignments');
   const [copyMsg,setCopyMsg] = useState('');
   const [authUser,setAuthUser] = useState(null);
-  const [showLogin,setShowLogin] = useState(false);
+  const [showLogin,setShowLogin] = useState(true);
+  const [mailMenu,setMailMenu] = useState(null);
+  const [compose,setCompose] = useState(null);
+  const [gmailToken,setGmailToken] = useState(null);
+  const [gmailEmail,setGmailEmail] = useState('');
+  const [gmailBusy,setGmailBusy] = useState(false);
+  const [gmailMessage,setGmailMessage] = useState('');
   const fileRef = useRef();
 
   const activeSheet = sheets.find(s=>s.id===activeId) || null;
@@ -38,10 +44,14 @@ function App(){
   useEffect(()=>{
     if(!supabaseReady) return;
     supabaseClient.auth.getSession().then(({data})=>{
-      if(data.session) setAuthUser(data.session.user);
+      if(data.session){
+        setAuthUser(data.session.user);
+        setShowLogin(false);
+      }
     });
     const {data: sub} = supabaseClient.auth.onAuthStateChange((_event, session)=>{
       setAuthUser(session ? session.user : null);
+      setShowLogin(!session);
     });
     return ()=> sub.subscription.unsubscribe();
   },[]);
@@ -59,6 +69,29 @@ function App(){
   async function signOut(){
     if(supabaseReady) await supabaseClient.auth.signOut();
     setAuthUser(null);
+    setShowLogin(true);
+  }
+
+  function connectGmail(){
+    if(!window.google?.accounts?.oauth2){
+      setGmailMessage('Google sign-in library is still loading. Refresh and try again.');
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id:GOOGLE_CLIENT_ID,
+      scope:GOOGLE_GMAIL_SCOPE,
+      callback:async response=>{
+        if(response.error){ setGmailMessage(response.error); return; }
+        setGmailToken(response.access_token);
+        try{
+          const result = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {headers:{Authorization:`Bearer ${response.access_token}`}});
+          const profile = await result.json();
+          setGmailEmail(profile.emailAddress || 'Gmail connected');
+          setGmailMessage('Gmail connected');
+        }catch(e){ setGmailEmail('Gmail connected'); }
+      },
+    });
+    tokenClient.requestAccessToken({prompt:gmailToken ? '' : 'consent'});
   }
 
   function parseSheetFromWorkbook(json){
@@ -165,21 +198,74 @@ function App(){
     return `mailto:${encodeURIComponent(r.gmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
-  const incomplete = useMemo(()=> rows.filter(r=> statusOf(r.pct,r.date,dateType)!=='complete' && r.gmail),[rows,dateType]);
+  const DEFAULT_TEMPLATE = `Hi {{name}},\n\nThis is a reminder to finish your pending Learning Unit ({{lu}}).\n\nThanks!`;
 
-  function notifyAllIncomplete(){
-    if(incomplete.length===0) return;
-    const emails = Array.from(new Set(incomplete.map(r=>r.gmail)));
+  function reminderDraft(targetRows, withNote){
+    const recipients = Array.from(new Set(targetRows.map(r=>r.gmail).filter(Boolean)));
+    const first = targetRows[0] || {};
     const subject = 'Reminder: please complete your LU';
-    const body = "Hi,\n\nThis is a reminder to finish your pending Learning Unit. Please complete it as soon as you can.\n\nThanks!";
-    const mailto = `mailto:?bcc=${encodeURIComponent(emails.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const body = withNote
+      ? `Hi,\n\nThis is a reminder to finish your pending Learning Unit. Please complete it as soon as you can.\n\nThanks!`
+      : DEFAULT_TEMPLATE.replaceAll('{{name}}', first.name || 'there').replaceAll('{{lu}}', first.lu || 'your LU');
+    return {recipients, subject, body};
+  }
+
+  function openMailMenu(targetRows){
+    if(targetRows.length===0) return;
+    setMailMenu(targetRows);
+  }
+
+  function openComposer(targetRows){
+    setMailMenu(null);
+    setCompose(reminderDraft(targetRows, true));
+  }
+
+  function openTemplateMail(targetRows){
+    setMailMenu(null);
+    const draft = reminderDraft(targetRows, false);
+    launchMail(draft);
+  }
+
+  async function sendThroughGmail(draft){
+    const lines = [
+      `Bcc: ${draft.recipients.join(', ')}`,
+      `Subject: ${draft.subject}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      draft.body,
+    ];
+    const encoded = btoa(unescape(encodeURIComponent(lines.join('\r\n'))))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const result = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method:'POST',
+      headers:{Authorization:`Bearer ${gmailToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({raw:encoded}),
+    });
+    if(!result.ok) throw new Error('Gmail could not send this message. Reconnect Gmail and try again.');
+  }
+
+  async function launchMail(draft){
+    if(draft.recipients.length===0) return;
+    if(gmailToken){
+      setGmailBusy(true); setGmailMessage('Sending email...');
+      try{
+        await sendThroughGmail(draft);
+        setGmailMessage(`Sent from ${gmailEmail || 'Gmail'}`);
+      }catch(error){
+        setGmailMessage(error.message);
+      }finally{ setGmailBusy(false); }
+      return;
+    }
+    const mailto = `mailto:?bcc=${encodeURIComponent(draft.recipients.join(','))}&subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
     if(mailto.length>1800){
       copyEmails();
-      alert(`That's ${emails.length} recipients — too many for a mailto link to handle reliably, so the list has been copied to your clipboard instead. Paste it into the BCC field of a new email in Gmail/Outlook.`);
-    }else{
-      window.location.href = mailto;
+      alert('There are too many recipients for one mailto link. The email list was copied to your clipboard.');
+      return;
     }
+    window.location.href = mailto;
   }
+
+  const incomplete = useMemo(()=> rows.filter(r=> statusOf(r.pct,r.date,dateType)!=='complete' && r.gmail),[rows,dateType]);
 
   async function copyEmails(){
     const emails = Array.from(new Set(incomplete.map(r=>r.gmail)));
@@ -256,9 +342,44 @@ function App(){
 
   if(!loaded) return null;
 
+  if(showLogin){
+    return <AuthModal onSignedIn={onSignedIn} onClose={()=>setShowLogin(false)} page />;
+  }
+
+  const mailTarget = mailMenu ? mailMenu : [];
+
   return (
     <div className="wrap">
+      {mailMenu && (
+        <div className="mail-menu-overlay" onClick={()=>setMailMenu(null)}>
+          <div className="mail-menu" onClick={e=>e.stopPropagation()}>
+            <button className="modal-close" onClick={()=>setMailMenu(null)}>×</button>
+            <h2>Send reminder</h2>
+            <p>{mailTarget.length===1 ? `To ${mailTarget[0].name || mailTarget[0].gmail}` : `To ${mailTarget.length} incomplete assignments`}</p>
+            <button className="mail-choice" onClick={()=>openComposer(mailTarget)}><b>Send with a note</b><span>Edit the message before opening your email app.</span></button>
+            <button className="mail-choice" onClick={()=>openTemplateMail(mailTarget)}><b>Send without a note</b><span>Use the saved reminder template.</span></button>
+          </div>
+        </div>
+      )}
+      {compose && (
+        <div className="mail-menu-overlay" onClick={()=>setCompose(null)}>
+          <form className="mail-compose" onClick={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault(); launchMail(compose); setCompose(null);}}>
+            <button type="button" className="modal-close" onClick={()=>setCompose(null)}>×</button>
+            <h2>Edit email</h2>
+            <label>Recipients</label><input value={compose.recipients.join(', ')} readOnly />
+            <label>Subject</label><input value={compose.subject} onChange={e=>setCompose({...compose,subject:e.target.value})} />
+            <label>Message</label><textarea rows="9" value={compose.body} onChange={e=>setCompose({...compose,body:e.target.value})} />
+            <button className="login-submit" type="submit">Open email app</button>
+          </form>
+        </div>
+      )}
       <div className="signin-corner">
+        {gmailToken ? (
+          <span className="gmail-status">{gmailEmail || 'Gmail connected'}</span>
+        ) : (
+          <button className="signin-btn" onClick={connectGmail}>Connect Gmail</button>
+        )}
+        {gmailMessage && <span className="gmail-message">{gmailMessage}</span>}
         {authUser ? (
           <>
             <span className="account-id">{authUser.email}</span>
@@ -326,7 +447,7 @@ function App(){
             <span className="notify-info">
               <b>{incomplete.length}</b> {incomplete.length===1?'person hasn\'t':'folks haven\'t'} finished in this roster
             </span>
-            <button className="notify-btn" onClick={notifyAllIncomplete} disabled={incomplete.length===0}>
+            <button className="notify-btn" onClick={()=>openMailMenu(incomplete)} disabled={incomplete.length===0}>
               Email everyone incomplete
             </button>
             <button className="notify-btn ghost" onClick={copyEmails} disabled={incomplete.length===0}>
@@ -384,7 +505,7 @@ function App(){
                       <td><span className={"badge "+st}>{STATUS_META[st].label}</span></td>
                       <td>
                         {st!=='complete' && r.gmail && (
-                          <a className="row-notify" href={personalMailto(r)} title={`Email ${r.name||r.gmail}`}>✉</a>
+                          <button className="row-notify" onClick={()=>openMailMenu([r])} title={`Email ${r.name||r.gmail}`}>✉</button>
                         )}
                       </td>
                     </tr>
@@ -404,7 +525,7 @@ function App(){
                       <div style={{display:'flex',alignItems:'center',gap:10}}>
                         <span className="pct">avg {avg}%</span>
                         {anyIncomplete && p.gmail && (
-                          <a className="row-notify" href={personalMailto(p.items.find(r=>statusOf(r.pct,r.date,dateType)!=='complete'))} title={`Email ${p.name||p.gmail}`}>✉</a>
+                          <button className="row-notify" onClick={()=>openMailMenu([p.items.find(r=>statusOf(r.pct,r.date,dateType)!=='complete')])} title={`Email ${p.name||p.gmail}`}>✉</button>
                         )}
                       </div>
                     </div>

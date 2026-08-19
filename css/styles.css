@@ -50,6 +50,8 @@
   }
   .signin-btn:hover{background:var(--ink);color:var(--paper);}
   .account-id{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .gmail-status,.gmail-message{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--teal);}
+  .gmail-message{color:var(--muted);}
   .logout-btn{
     background:transparent;border:1px solid var(--line);border-radius:3px;color:var(--muted);
     font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;cursor:pointer;
@@ -60,6 +62,19 @@
     position:fixed;inset:0;background:rgba(22,32,43,.45);display:flex;align-items:center;justify-content:center;
     padding:20px;z-index:50;
   }
+  .login-page{
+    min-height:100vh;background:var(--paper-2);display:flex;align-items:center;justify-content:center;
+    padding:28px;position:relative;overflow:hidden;
+  }
+  .login-page::before{
+    content:'';position:absolute;width:480px;height:480px;border:1px solid var(--line);border-radius:50%;
+    right:-180px;top:-210px;box-shadow:0 0 0 28px var(--paper-2),0 0 0 29px var(--line);
+  }
+  .login-page::after{
+    content:'LU / COMPLETION';position:absolute;left:28px;top:28px;font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.14em;color:var(--muted);
+  }
+  .login-page-card{z-index:1;box-shadow:0 18px 50px rgba(20,20,20,.08);}
   .login-card{
     position:relative;width:100%;max-width:380px;background:var(--paper);border:1px solid var(--line);
     border-radius:6px;padding:32px 30px;
@@ -120,9 +135,20 @@
   .notify-btn:disabled{opacity:.4;cursor:default;background:var(--muted);border-color:var(--muted);}
   .copy-msg{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--teal);}
   .row-notify{
-    text-decoration:none;color:var(--teal);font-size:15px;padding:2px 6px;border-radius:3px;
+    text-decoration:none;color:var(--teal);font-size:15px;padding:2px 6px;border-radius:3px;border:0;background:transparent;cursor:pointer;
   }
   .row-notify:hover{background:var(--teal-soft);}
+  .mail-menu-overlay{position:fixed;inset:0;background:rgba(22,32,43,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:45;}
+  .mail-menu,.mail-compose{position:relative;width:100%;max-width:430px;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:30px;box-shadow:0 18px 50px rgba(20,20,20,.12);}
+  .mail-menu h2,.mail-compose h2{font-family:'Fraunces',serif;margin:0 0 6px;font-size:24px;}
+  .mail-menu p{color:var(--muted);font-size:13px;margin:0 0 18px;}
+  .mail-choice{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:13px 14px;margin-top:10px;color:var(--ink);cursor:pointer;}
+  .mail-choice:hover{border-color:var(--ink);background:var(--paper-2);}
+  .mail-choice b{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .mail-choice span{font-size:12px;color:var(--muted);margin-top:5px;}
+  .mail-compose label{display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px;}
+  .mail-compose input,.mail-compose textarea{width:100%;font-family:'Inter',sans-serif;font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--ink);}
+  .mail-compose textarea{resize:vertical;line-height:1.5;}
 
   /* ---- Controls ---- */
   .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center;}

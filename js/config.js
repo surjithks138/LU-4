@@ -2,8 +2,10 @@
 // 1. Create a free project at supabase.com
 // 2. Project Settings -> API -> copy "Project URL" and the "anon public" / "publishable" key
 // 3. Paste them below (do NOT paste your secret/service key here)
-const SUPABASE_URL = 'https://erwelgfyuhorkpfpzzee.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_20ugYijXCXTAejfjsW9VUA_emeOZHtJ';
+const SUPABASE_URL = 'https://xnyjdjfewytiiviiuupr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_xRqeHx_gQZHvubDxGUGcJw_Hb7b1KdH';
+const GOOGLE_CLIENT_ID = '608143820609-jiichj1u6rve1kdhiqul3nna8k1m3hfc.apps.googleusercontent.com';
+const GOOGLE_GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const supabaseConfigured = SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
 const supabaseLibLoaded = typeof window.supabase !== 'undefined';
 const supabaseReady = supabaseConfigured && supabaseLibLoaded;

@@ -1,4 +1,4 @@
-function AuthModal({onSignedIn, onClose}){
+function AuthModal({onSignedIn, onClose, page=false}){
   const [tab,setTab] = useState('signin'); // 'signin' | 'signup'
   const [email,setEmail] = useState('');
   const [password,setPassword] = useState('');
@@ -9,8 +9,8 @@ function AuthModal({onSignedIn, onClose}){
 
   if(!supabaseConfigured){
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="login-card" onClick={e=>e.stopPropagation()}>
+      <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+        <div className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()}>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
           <h1 className="login-title">Login not set up yet</h1>
           <p className="login-sub">
@@ -25,8 +25,8 @@ function AuthModal({onSignedIn, onClose}){
 
   if(!supabaseLibLoaded){
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="login-card" onClick={e=>e.stopPropagation()}>
+      <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+        <div className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()}>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
           <h1 className="login-title">Couldn't load the login library</h1>
           <p className="login-sub">
@@ -55,21 +55,32 @@ function AuthModal({onSignedIn, onClose}){
         if(err) throw err;
         onSignedIn(data.user);
       }else{
-        const {data, error: err} = await supabaseClient.auth.signUp({email:email.trim(), password});
+        const {data, error: err} = await supabaseClient.auth.signUp({
+          email:email.trim(),
+          password,
+          options:{emailRedirectTo:window.location.origin}
+        });
         if(err) throw err;
         if(data.session){ onSignedIn(data.user); }
         else { setInfo('Account created — check your email to confirm before signing in.'); }
       }
     }catch(err){
-      setError(err.message || 'Something went wrong.');
+      const message = (err.message || '').toLowerCase();
+      if(message.includes('rate limit') || err.status===429){
+        setError('Supabase email limit reached. Wait before requesting another email, or disable email confirmation in Supabase for local testing.');
+      }else if(message.includes('otp') && message.includes('expired')){
+        setError('This confirmation link expired. Request one new email and use only the latest link.');
+      }else{
+        setError(err.message || 'Something went wrong.');
+      }
     }finally{
       setBusy(false);
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <form className="login-card" onClick={e=>e.stopPropagation()} onSubmit={submit}>
+    <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+      <form className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()} onSubmit={submit}>
         <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h1 className="login-title">{tab==='signin' ? 'Sign in' : 'Create account'}</h1>
         <p className="login-sub">Real account, backed by Supabase — your password is never stored here.</p>
