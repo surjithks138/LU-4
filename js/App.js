@@ -10,7 +10,7 @@ function App(){
   const [view,setView] = useState('assignments');
   const [copyMsg,setCopyMsg] = useState('');
   const [authUser,setAuthUser] = useState(null);
-  const [showLogin,setShowLogin] = useState(false);
+  const [showLogin,setShowLogin] = useState(true);
   const fileRef = useRef();
 
   const activeSheet = sheets.find(s=>s.id===activeId) || null;
@@ -38,10 +38,14 @@ function App(){
   useEffect(()=>{
     if(!supabaseReady) return;
     supabaseClient.auth.getSession().then(({data})=>{
-      if(data.session) setAuthUser(data.session.user);
+      if(data.session){
+        setAuthUser(data.session.user);
+        setShowLogin(false);
+      }
     });
     const {data: sub} = supabaseClient.auth.onAuthStateChange((_event, session)=>{
       setAuthUser(session ? session.user : null);
+      setShowLogin(!session);
     });
     return ()=> sub.subscription.unsubscribe();
   },[]);
@@ -59,6 +63,7 @@ function App(){
   async function signOut(){
     if(supabaseReady) await supabaseClient.auth.signOut();
     setAuthUser(null);
+    setShowLogin(true);
   }
 
   function parseSheetFromWorkbook(json){
@@ -255,6 +260,10 @@ function App(){
   },[stats]);
 
   if(!loaded) return null;
+
+  if(showLogin){
+    return <AuthModal onSignedIn={onSignedIn} onClose={()=>setShowLogin(false)} page />;
+  }
 
   return (
     <div className="wrap">

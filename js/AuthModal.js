@@ -1,4 +1,4 @@
-function AuthModal({onSignedIn, onClose}){
+function AuthModal({onSignedIn, onClose, page=false}){
   const [tab,setTab] = useState('signin'); // 'signin' | 'signup'
   const [email,setEmail] = useState('');
   const [password,setPassword] = useState('');
@@ -9,8 +9,8 @@ function AuthModal({onSignedIn, onClose}){
 
   if(!supabaseConfigured){
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="login-card" onClick={e=>e.stopPropagation()}>
+      <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+        <div className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()}>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
           <h1 className="login-title">Login not set up yet</h1>
           <p className="login-sub">
@@ -25,8 +25,8 @@ function AuthModal({onSignedIn, onClose}){
 
   if(!supabaseLibLoaded){
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="login-card" onClick={e=>e.stopPropagation()}>
+      <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+        <div className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()}>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
           <h1 className="login-title">Couldn't load the login library</h1>
           <p className="login-sub">
@@ -68,8 +68,8 @@ function AuthModal({onSignedIn, onClose}){
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <form className="login-card" onClick={e=>e.stopPropagation()} onSubmit={submit}>
+    <div className={page ? 'login-page' : 'modal-overlay'} onClick={page ? undefined : onClose}>
+      <form className={page ? 'login-card login-page-card' : 'login-card'} onClick={e=>e.stopPropagation()} onSubmit={submit}>
         <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h1 className="login-title">{tab==='signin' ? 'Sign in' : 'Create account'}</h1>
         <p className="login-sub">Real account, backed by Supabase — your password is never stored here.</p>
