@@ -1,3 +1,24 @@
+const DASHBOARD_SUBJECTS = [
+  'Discrete Mathematics',
+  'Innovation and Design Thinking',
+  'UI and UX Design for Computer Science Engineering',
+  'Computer Organisation and Architecture',
+  'Operating Systems',
+  'Environmental Sciences',
+  'Introduction to Artificial Intelligence',
+];
+
+function normalizeSubjectName(value){
+  return String(value || '').trim().replace(/^#\s*/, '').toLowerCase();
+}
+
+function squadForRow(row){
+  if(String(row.squad || '').trim()) return String(row.squad).trim();
+  const email = String(row.gmail || '').toLowerCase();
+  const match = email.match(/(?:^|[^0-9])(138|139)(?:[^0-9]|$)/);
+  return match ? match[1] : '';
+}
+
 function App(){
   const [sheets,setSheets] = useState([]); // [{id, fileName, dateType, rows}]
   const [activeId,setActiveId] = useState(null);
@@ -8,6 +29,9 @@ function App(){
   const [pctFilter,setPctFilter] = useState('all');
   const [pctExact,setPctExact] = useState('');
   const [view,setView] = useState('assignments');
+  const [activeSection,setActiveSection] = useState('assignments');
+  const [dashboardSubject,setDashboardSubject] = useState(null);
+  const [dashboardMetric,setDashboardMetric] = useState(false);
   const [selectedSubject,setSelectedSubject] = useState('all');
   const [showSubjects,setShowSubjects] = useState(false);
   const [subjectSearch,setSubjectSearch] = useState('');
@@ -20,6 +44,8 @@ function App(){
   const [gmailEmail,setGmailEmail] = useState('');
   const [gmailBusy,setGmailBusy] = useState(false);
   const [gmailMessage,setGmailMessage] = useState('');
+  const [theme,setTheme] = useState(()=>localStorage.getItem('lu-theme') || 'light');
+  const [fontSize,setFontSize] = useState(()=>localStorage.getItem('lu-font-size') || 'normal');
   const fileRef = useRef();
 
   const activeSheet = sheets.find(s=>s.id===activeId) || null;
@@ -51,6 +77,28 @@ function App(){
     }catch(e){ /* no data yet */ }
     setLoaded(true);
   },[]);
+
+  useEffect(()=>{
+    localStorage.setItem('lu-theme', theme);
+  },[theme]);
+
+  useEffect(()=>{
+    localStorage.setItem('lu-font-size', fontSize);
+  },[fontSize]);
+
+  function increaseFontSize(){
+    setFontSize(fontSize==='normal' ? 'large' : (fontSize==='large' ? 'xlarge' : 'normal'));
+  }
+
+  function navigateTo(section){
+    setActiveSection(section);
+    if(section==='dashboard'){
+      setDashboardSubject(null);
+      setDashboardMetric(false);
+    }
+    if(section==='progress') setView('people');
+    if(section==='assignments') setView('assignments');
+  }
 
   // Real auth session, backed by Supabase (see js/config.js).
   useEffect(()=>{
@@ -131,7 +179,11 @@ function App(){
         lu: luKey ? String(r[luKey]).trim() : '',
         pct: Math.max(0, Math.min(100, Math.round(pctRaw))),
         date: dateVal ? dateVal.toISOString() : null,
-        squad: squadKey ? String(r[squadKey]).trim() : '',
+        squad: squadKey ? String(r[squadKey]).trim() : (()=>{
+          const email = gmailKey ? String(r[gmailKey]).trim().toLowerCase() : '';
+          const match = email.match(/(?:^|[^0-9])(138|139)(?:[^0-9]|$)/);
+          return match ? match[1] : '';
+        })(),
         campus: campusKey ? String(r[campusKey]).trim() : '',
       };
     }).filter(r=>r.name || r.gmail);
@@ -304,7 +356,7 @@ function App(){
     return subjectRows.filter(r=>{
       const st = statusOf(r.pct, r.date, dateType);
       if(statusFilter!=='all' && st!==statusFilter) return false;
-      if(squadFilter!=='all' && r.squad!==squadFilter) return false;
+      if(squadFilter!=='all' && squadForRow(r)!==squadFilter) return false;
       if(threshold!==null && r.pct>=threshold) return false;
       if(search){
         const q = search.toLowerCase();
@@ -322,6 +374,16 @@ function App(){
     subjectRows.forEach(r=> counts[statusOf(r.pct,r.date,dateType)]++ );
     return {total, people, avg, counts};
   },[subjectRows,dateType]);
+
+  const dashboardSubjects = useMemo(()=>DASHBOARD_SUBJECTS.map(subject=>{
+    const subjectItems = rows.filter(r=>normalizeSubjectName(r.lu)===normalizeSubjectName(subject));
+    const students = Array.from(new Map(subjectItems.map(r=>[r.gmail || r.name || `${subject}-${subjectItems.indexOf(r)}`,r])).values());
+    const average = students.length ? Math.round(students.reduce((total,row)=>total+row.pct,0)/students.length) : 0;
+    const completed = students.filter(row=>statusOf(row.pct,row.date,dateType)==='complete');
+    return {subject,students,average,completed,incomplete:students.filter(row=>statusOf(row.pct,row.date,dateType)!=='complete')};
+  }),[subjectNames,rows,dateType]);
+
+  const selectedDashboard = dashboardSubjects.find(item=>item.subject===dashboardSubject) || null;
 
   const byPerson = useMemo(()=>{
     const map = {};
@@ -364,7 +426,26 @@ function App(){
   const mailTarget = mailMenu ? mailMenu : [];
 
   return (
-    <div className="wrap">
+    <div className="app-shell" data-theme={theme} data-font-size={fontSize}>
+      <aside className="sidebar">
+        <div className="brand"><span className="brand-mark">K</span><span>Kalvium</span></div>
+        <nav className="side-nav" aria-label="Main navigation">
+          <button className={'side-link'+(activeSection==='home'?' active':'')} onClick={()=>navigateTo('home')}><span>⌂</span>Home</button>
+          <button className={'side-link'+(activeSection==='dashboard'?' active':'')} onClick={()=>navigateTo('dashboard')}><span>▣</span>Dashboard</button>
+          <button className={'side-link'+(activeSection==='progress'?' active':'')} onClick={()=>navigateTo('progress')}><span>▥</span>My Progress</button>
+          <button className={'side-link'+(activeSection==='assignments'?' active secondary':'')} onClick={()=>navigateTo('assignments')}><span>▤</span>Assignments</button>
+          <button className={'side-link'+(activeSection==='community'?' active':'')} onClick={()=>navigateTo('community')}><span>◎</span>Community</button>
+          <button className={'side-link'+(activeSection==='resources'?' active':'')} onClick={()=>navigateTo('resources')}><span>▱</span>Resources</button>
+          <button className={'side-link'+(activeSection==='settings'?' active':'')} onClick={()=>navigateTo('settings')}><span>⚙</span>Settings</button>
+        </nav>
+        <div className="sidebar-prompt"><strong>Small steps<br/>today, big skills<br/>tomorrow.</strong><small>Kalvium</small></div>
+      </aside>
+      <div className="app-main">
+        <header className="topbar">
+          <div className="global-search"><span>⌕</span><input placeholder="Search anything..." /></div>
+          <div className="topbar-actions"><button className="font-size-toggle" onClick={increaseFontSize} aria-label={`Increase font size, currently ${fontSize}`} title={`Text size: ${fontSize}`}>A+</button><button className="theme-toggle" onClick={()=>setTheme(theme==='light'?'dark':'light')} aria-label={`Switch to ${theme==='light'?'dark':'light'} theme`} title={`Switch to ${theme==='light'?'dark':'light'} theme`}>{theme==='light'?'☾':'☀'}</button><span className="bell">♧<i></i></span><span className="avatar">{(authUser?.email || 'D').slice(0,1).toUpperCase()}</span><span className="user-meta"><b>{authUser?.email?.split('@')[0] || 'Deborah Isaac'}</b><small>B.Tech CSE (Applied AI)</small></span><span>⌄</span></div>
+        </header>
+        <main className="wrap">
       {mailMenu && (
         <div className="mail-menu-overlay" onClick={()=>setMailMenu(null)}>
           <div className="mail-menu" onClick={e=>e.stopPropagation()}>
@@ -449,7 +530,46 @@ function App(){
         </div>
       )}
 
-      {rows.length===0 ? (
+      {activeSection==='dashboard' ? (
+        <section className="dashboard-panel">
+          <div className="section-heading">
+            <span className="section-kicker">Dashboard</span>
+            <h2>{selectedDashboard ? selectedDashboard.subject : 'All subjects'}</h2>
+            <p>{selectedDashboard ? (dashboardMetric ? 'Student completion details' : 'Subject completion overview') : 'Choose a subject to view its completion percentage.'}</p>
+          </div>
+          {!selectedDashboard && (
+            rows.length===0 ? <div className="empty dashboard-empty"><b>No subjects available yet.</b><br/>Upload a roster to see subject completion data.</div> :
+            <div className="subject-dashboard-grid">
+              {dashboardSubjects.map(item=><button className="subject-dashboard-card" key={item.subject} onClick={()=>{setDashboardSubject(item.subject);setDashboardMetric(false);}}>
+                <strong>{item.subject}</strong>
+                <span>{item.students.length ? `${item.students.length} student${item.students.length===1?'':'s'}` : 'No roster data yet'}</span>
+                <em>{item.students.length ? 'View completion →' : 'Upload matching data →'}</em>
+              </button>)}
+            </div>
+          )}
+          {selectedDashboard && !dashboardMetric && (
+            <div className="dashboard-detail">
+              <button className="dashboard-back" onClick={()=>setDashboardSubject(null)}>← All subjects</button>
+              {selectedDashboard.students.length ? <>
+                <button className="completion-drill-card" onClick={()=>setDashboardMetric(true)}>
+                  <span>Average completion</span><strong>{selectedDashboard.average}%</strong><small>Click to see completed and incomplete students</small>
+                </button>
+                <div className="dashboard-summary-row"><span>{selectedDashboard.completed.length} completed</span><span>{selectedDashboard.incomplete.length} incomplete</span><span>{100-selectedDashboard.average}% pending</span></div>
+              </> : <div className="empty dashboard-empty"><b>No roster data for this subject yet.</b><br/>Upload a sheet containing this subject to see completion details.</div>}
+            </div>
+          )}
+          {selectedDashboard && dashboardMetric && (
+            <div className="dashboard-detail">
+              <button className="dashboard-back" onClick={()=>setDashboardMetric(false)}>← Back to {selectedDashboard.subject}</button>
+              <div className="metric-strip"><div><small>Average completion</small><strong>{selectedDashboard.average}%</strong></div><div><small>Pending percentage</small><strong>{100-selectedDashboard.average}%</strong></div></div>
+              <div className="student-columns">
+                <div className="student-list complete-list"><h3>Completed students <span>{selectedDashboard.completed.length}</span></h3>{selectedDashboard.completed.length ? selectedDashboard.completed.map((student,index)=><div className="student-row" key={`${student.gmail}-${index}`}><b>{student.name || student.gmail || 'Unnamed student'}</b><span>{student.pct}%</span></div>) : <p>No completed students yet.</p>}</div>
+                <div className="student-list incomplete-list"><h3>Students who did not complete <span>{selectedDashboard.incomplete.length}</span></h3>{selectedDashboard.incomplete.length ? selectedDashboard.incomplete.map((student,index)=><div className="student-row" key={`${student.gmail}-${index}`}><b>{student.name || student.gmail || 'Unnamed student'}</b><span>{student.pct}%</span></div>) : <p>Everyone has completed this subject.</p>}</div>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (['home','dashboard','progress','assignments'].includes(activeSection) ? (rows.length===0 ? (
         <div className="empty">
           <b>No roster loaded yet.</b><br/>
           Upload a sheet with columns like these — headers can vary, they're auto-detected.
@@ -579,7 +699,22 @@ function App(){
 
           <div className="footer-note">Data stays on your account · re-upload anytime to refresh the roster</div>
         </>
-      )}
+      )) : (
+        <section className="section-panel">
+          <div className="section-heading">
+            <span className="section-kicker">Kalvium workspace</span>
+            <h2>{activeSection==='community' ? 'Community' : activeSection==='resources' ? 'Resources' : 'Settings'}</h2>
+            <p>{activeSection==='community' ? 'Connect with your squad and keep learning together.' : activeSection==='resources' ? 'Keep your learning materials and useful links close by.' : 'Manage your dashboard preferences and account settings.'}</p>
+          </div>
+          <div className="section-grid">
+            {activeSection==='community' && <><button className="section-card" onClick={()=>alert('Squad discussions will be available here soon.')}><strong>Squad discussions</strong><span>Share updates, questions, and wins with your squad.</span></button><button className="section-card" onClick={()=>alert('Community events will be available here soon.')}><strong>Community events</strong><span>Discover upcoming sessions and peer learning activities.</span></button></>}
+            {activeSection==='resources' && <><button className="section-card" onClick={()=>fileRef.current.click()}><strong>Upload roster</strong><span>Add an Excel roster to refresh your progress data.</span></button><button className="section-card" onClick={()=>alert('Learning resources will be available here soon.')}><strong>Learning library</strong><span>Browse guides, references, and course material.</span></button></>}
+            {activeSection==='settings' && <><button className="section-card" onClick={()=>setTheme(theme==='light'?'dark':'light')}><strong>Appearance</strong><span>Switch between the {theme} theme and the other color mode.</span></button><button className="section-card" onClick={increaseFontSize}><strong>Text size</strong><span>Current size: {fontSize}. Click to increase it.</span></button><button className="section-card" onClick={signOut}><strong>Account</strong><span>Sign out of the current account.</span></button></>}
+          </div>
+        </section>
+      ))}
+        </main>
+      </div>
     </div>
   );
 }
