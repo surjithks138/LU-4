@@ -32,17 +32,17 @@ function AuthModal({onSignedIn, onClose}){
 
     setBusy(true);
     try{
-      if(usingLocalAuth){
-        const users = getLocalUsers();
+      const localUsers = getLocalUsers();
 
+      if(usingLocalAuth){
         if(tab==='signin'){
-          const user = users.find(u => u.email.toLowerCase() === trimmedEmail.toLowerCase() && u.password === password);
+          const user = localUsers.find(u => u.email.toLowerCase() === trimmedEmail.toLowerCase() && u.password === password);
           if(!user) throw new Error('No local account found for that email/password. Create an account first.');
           onSignedIn({email: user.email});
           return;
         }
 
-        const alreadyExists = users.some(u => u.email.toLowerCase() === trimmedEmail.toLowerCase());
+        const alreadyExists = localUsers.some(u => u.email.toLowerCase() === trimmedEmail.toLowerCase());
         if(alreadyExists){
           setInfo('A local account already exists for this email. You can sign in with it now.');
           setTab('signin');
@@ -51,8 +51,8 @@ function AuthModal({onSignedIn, onClose}){
           return;
         }
 
-        users.push({email: trimmedEmail, password});
-        saveLocalUsers(users);
+        localUsers.push({email: trimmedEmail, password});
+        saveLocalUsers(localUsers);
         setInfo('Local account created successfully. You can sign in now.');
         setTab('signin');
         setPassword('');
@@ -61,14 +61,59 @@ function AuthModal({onSignedIn, onClose}){
       }
 
       if(tab==='signin'){
-        const {data, error: err} = await supabaseClient.auth.signInWithPassword({email:trimmedEmail, password});
-        if(err) throw err;
-        onSignedIn(data.user);
-      }else{
+        try{
+          const {data, error: err} = await supabaseClient.auth.signInWithPassword({email:trimmedEmail, password});
+          if(err) throw err;
+          onSignedIn(data.user);
+          return;
+        }catch(err){
+          const fallbackUser = localUsers.find(u => u.email.toLowerCase() === trimmedEmail.toLowerCase() && u.password === password);
+          if(fallbackUser){
+            onSignedIn({email: fallbackUser.email});
+            setInfo('Signed in with your local demo account.');
+            return;
+          }
+          throw err;
+        }
+      }
+
+      // Sign up flow: try Supabase first, but fall back to local demo account if confirmation is required.
+      try{
         const {data, error: err} = await supabaseClient.auth.signUp({email:trimmedEmail, password});
         if(err) throw err;
-        if(data.session){ onSignedIn(data.user); }
-        else { setInfo('Account created — check your email to confirm before signing in.'); }
+        if(data.session){ onSignedIn(data.user); return; }
+
+        const alreadyExists = localUsers.some(u => u.email.toLowerCase() === trimmedEmail.toLowerCase());
+        if(alreadyExists){
+          setInfo('Supabase email confirmation is required, and a local account already exists. Use Sign in to continue.');
+          setTab('signin');
+          setPassword('');
+          setConfirm('');
+          return;
+        }
+
+        localUsers.push({email: trimmedEmail, password});
+        saveLocalUsers(localUsers);
+        setInfo('Supabase account created, but email confirmation is required. A local demo account was also created so you can sign in now.');
+        setTab('signin');
+        setPassword('');
+        setConfirm('');
+      }catch(err){
+        const alreadyExists = localUsers.some(u => u.email.toLowerCase() === trimmedEmail.toLowerCase());
+        if(alreadyExists){
+          setInfo('A local account already exists for this email. You can sign in with it now.');
+          setTab('signin');
+          setPassword('');
+          setConfirm('');
+          return;
+        }
+
+        localUsers.push({email: trimmedEmail, password});
+        saveLocalUsers(localUsers);
+        setInfo('Supabase was unavailable, so a local demo account was created. You can sign in now.');
+        setTab('signin');
+        setPassword('');
+        setConfirm('');
       }
     }catch(err){
       setError(err.message || 'Something went wrong.');
